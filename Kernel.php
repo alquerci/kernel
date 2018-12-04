@@ -16,6 +16,7 @@ use Symfony\Bridge\ProxyManager\LazyProxy\PhpDumper\ProxyDumper;
 use Symfony\Component\Config\ConfigCache;
 use Symfony\Component\Config\Loader\DelegatingLoader;
 use Symfony\Component\Config\Loader\LoaderResolver;
+use Symfony\Component\Debug\DebugClassLoader;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -39,6 +40,9 @@ use Instinct\Component\Kernel\DependencyInjection\MergeExtensionConfigurationPas
  *
  * It manages an environment made of bundles.
  *
+ * Environment names must always start with a letter and
+ * they must only contain letters and numbers.
+ *
  * @author Fabien Potencier <fabien@symfony.com>
  */
 abstract class Kernel implements KernelInterface, RebootableInterface
@@ -49,10 +53,16 @@ abstract class Kernel implements KernelInterface, RebootableInterface
     protected $bundles = array();
 
     protected $container;
+    /**
+     * @deprecated since Symfony 4.2
+     */
     protected $rootDir;
     protected $environment;
     protected $debug;
     protected $booted = false;
+    /**
+     * @deprecated since Symfony 4.2
+     */
     protected $name;
     protected $startTime;
 
@@ -61,22 +71,22 @@ abstract class Kernel implements KernelInterface, RebootableInterface
     private $requestStackSize = 0;
     private $resetServices = false;
 
-    const VERSION = '4.1.6';
-    const VERSION_ID = 40106;
+    const VERSION = '4.2.0';
+    const VERSION_ID = 40200;
     const MAJOR_VERSION = 4;
-    const MINOR_VERSION = 1;
-    const RELEASE_VERSION = 6;
+    const MINOR_VERSION = 2;
+    const RELEASE_VERSION = 0;
     const EXTRA_VERSION = '';
 
-    const END_OF_MAINTENANCE = '01/2019';
-    const END_OF_LIFE = '07/2019';
+    const END_OF_MAINTENANCE = '07/2019';
+    const END_OF_LIFE = '01/2020';
 
     public function __construct(string $environment, bool $debug)
     {
         $this->environment = $environment;
         $this->debug = $debug;
-        $this->rootDir = $this->getRootDir();
-        $this->name = $this->getName();
+        $this->rootDir = $this->getRootDir(false);
+        $this->name = $this->getName(false);
     }
 
     public function __clone()
@@ -173,7 +183,10 @@ abstract class Kernel implements KernelInterface, RebootableInterface
     public function getBundle($name)
     {
         if (!isset($this->bundles[$name])) {
-            throw new \InvalidArgumentException(sprintf('Bundle "%s" does not exist or it is not enabled. Maybe you forgot to add it in the registerBundles() method of your %s.php file?', $name, \get_class($this)));
+            $class = \get_class($this);
+            $class = 'c' === $class[0] && 0 === strpos($class, "class@anonymous\0") ? get_parent_class($class).'@anonymous' : $class;
+
+            throw new \InvalidArgumentException(sprintf('Bundle "%s" does not exist or it is not enabled. Maybe you forgot to add it in the registerBundles() method of your %s.php file?', $name, $class));
         }
 
         return $this->bundles[$name];
@@ -202,15 +215,10 @@ abstract class Kernel implements KernelInterface, RebootableInterface
 
         $isResource = 0 === strpos($path, 'Resources') && null !== $dir;
         $overridePath = substr($path, 9);
-        $resourceBundle = null;
         $bundle = $this->getBundle($bundleName);
         $files = array();
 
         if ($isResource && file_exists($file = $dir.'/'.$bundle->getName().$overridePath)) {
-            if (null !== $resourceBundle) {
-                throw new \RuntimeException(sprintf('"%s" resource is hidden by a resource from the "%s" derived bundle. Create a "%s" file to override the bundle resource.', $file, $resourceBundle, $dir.'/'.$bundle->getName().$overridePath));
-            }
-
             $files[] = $file;
         }
 
@@ -219,7 +227,6 @@ abstract class Kernel implements KernelInterface, RebootableInterface
                 return $file;
             }
             $files[] = $file;
-            $resourceBundle = $bundle->getName();
         }
 
         if (\count($files) > 0) {
@@ -231,9 +238,15 @@ abstract class Kernel implements KernelInterface, RebootableInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @deprecated since Symfony 4.2
      */
-    public function getName()
+    public function getName(/* $triggerDeprecation = true */)
     {
+        if (0 === \func_num_args() || func_get_arg(0)) {
+            @trigger_error(sprintf('The "%s()" method is deprecated since Symfony 4.2.', __METHOD__), E_USER_DEPRECATED);
+        }
+
         if (null === $this->name) {
             $this->name = preg_replace('/[^a-zA-Z0-9_]+/', '', basename($this->rootDir));
             if (ctype_digit($this->name[0])) {
@@ -262,9 +275,15 @@ abstract class Kernel implements KernelInterface, RebootableInterface
 
     /**
      * {@inheritdoc}
+     *
+     * @deprecated since Symfony 4.2, use getProjectDir() instead
      */
-    public function getRootDir()
+    public function getRootDir(/* $triggerDeprecation = true */)
     {
+        if (0 === \func_num_args() || func_get_arg(0)) {
+            @trigger_error(sprintf('The "%s()" method is deprecated since Symfony 4.2, use getProjectDir() instead.', __METHOD__), E_USER_DEPRECATED);
+        }
+
         if (null === $this->rootDir) {
             $r = new \ReflectionObject($this);
             $this->rootDir = \dirname($r->getFileName());
@@ -324,7 +343,7 @@ abstract class Kernel implements KernelInterface, RebootableInterface
      */
     public function getCacheDir()
     {
-        return $this->rootDir.'/cache/'.$this->environment;
+        return $this->getProjectDir().'/var/cache/'.$this->environment;
     }
 
     /**
@@ -332,7 +351,7 @@ abstract class Kernel implements KernelInterface, RebootableInterface
      */
     public function getLogDir()
     {
-        return $this->rootDir.'/logs';
+        return $this->getProjectDir().'/var/log';
     }
 
     /**
@@ -385,7 +404,10 @@ abstract class Kernel implements KernelInterface, RebootableInterface
      */
     protected function getContainerClass()
     {
-        return $this->name.ucfirst($this->environment).($this->debug ? 'Debug' : '').'ProjectContainer';
+        $class = \get_class($this);
+        $class = 'c' === $class[0] && 0 === strpos($class, "class@anonymous\0") ? get_parent_class($class).ContainerBuilder::hash($class) : $class;
+
+        return $this->name.str_replace('\\', '_', $class).ucfirst($this->environment).($this->debug ? 'Debug' : '').'Container';
     }
 
     /**
@@ -447,11 +469,18 @@ abstract class Kernel implements KernelInterface, RebootableInterface
                     return;
                 }
 
-                $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 3);
+                $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 5);
                 // Clean the trace by removing first frames added by the error handler itself.
                 for ($i = 0; isset($backtrace[$i]); ++$i) {
                     if (isset($backtrace[$i]['file'], $backtrace[$i]['line']) && $backtrace[$i]['line'] === $line && $backtrace[$i]['file'] === $file) {
                         $backtrace = \array_slice($backtrace, 1 + $i);
+                        break;
+                    }
+                }
+                // Remove frames added by DebugClassLoader.
+                for ($i = \count($backtrace) - 2; 0 < $i; --$i) {
+                    if (DebugClassLoader::class === ($backtrace[$i]['class'] ?? null)) {
+                        $backtrace = array($backtrace[$i + 1]);
                         break;
                     }
                 }
@@ -461,7 +490,7 @@ abstract class Kernel implements KernelInterface, RebootableInterface
                     'message' => $message,
                     'file' => $file,
                     'line' => $line,
-                    'trace' => $backtrace,
+                    'trace' => array($backtrace[0]),
                     'count' => 1,
                 );
             });
@@ -536,10 +565,16 @@ abstract class Kernel implements KernelInterface, RebootableInterface
         }
 
         return array(
+            /*
+             * @deprecated since Symfony 4.2, use kernel.project_dir instead
+             */
             'kernel.root_dir' => realpath($this->rootDir) ?: $this->rootDir,
             'kernel.project_dir' => realpath($this->getProjectDir()) ?: $this->getProjectDir(),
             'kernel.environment' => $this->environment,
             'kernel.debug' => $this->debug,
+            /*
+             * @deprecated since Symfony 4.2
+             */
             'kernel.name' => $this->name,
             'kernel.cache_dir' => realpath($cacheDir = $this->warmupDir ?: $this->getCacheDir()) ?: $cacheDir,
             'kernel.logs_dir' => realpath($this->getLogDir()) ?: $this->getLogDir(),

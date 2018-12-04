@@ -11,6 +11,8 @@
 
 namespace Instinct\Component\Kernel\DependencyInjection;
 
+use Symfony\Contracts\Service\ResetInterface;
+
 /**
  * Resets provided services.
  *
@@ -19,7 +21,7 @@ namespace Instinct\Component\Kernel\DependencyInjection;
  *
  * @internal
  */
-class ServicesResetter
+class ServicesResetter implements ResetInterface
 {
     private $resettableServices;
     private $resetMethods;
