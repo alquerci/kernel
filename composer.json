@@ -1,6 +1,6 @@
 {
     "name": "instinct/kernel",
-    "version": "4.1.6",
+    "version": "4.1.8",
     "type": "library",
     "description": "Kernel Component - symfony/http-kernel without HTTP dependencies - It will be abandoned in July 2019",
     "homepage": "https://github.com/alquerci/kernel",
