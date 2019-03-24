@@ -71,22 +71,23 @@ abstract class Kernel implements KernelInterface, RebootableInterface
     private $requestStackSize = 0;
     private $resetServices = false;
 
-    const VERSION = '4.2.3';
-    const VERSION_ID = 40203;
+    const VERSION = '4.3.0-DEV';
+    const VERSION_ID = 40300;
     const MAJOR_VERSION = 4;
-    const MINOR_VERSION = 2;
-    const RELEASE_VERSION = 3;
-    const EXTRA_VERSION = '';
+    const MINOR_VERSION = 3;
+    const RELEASE_VERSION = 0;
+    const EXTRA_VERSION = 'DEV';
 
-    const END_OF_MAINTENANCE = '07/2019';
-    const END_OF_LIFE = '01/2020';
+    const END_OF_MAINTENANCE = '01/2020';
+    const END_OF_LIFE = '07/2020';
 
-    public function __construct(string $environment, bool $debug)
+    public function __construct(string $environment, bool $debug, string $projectDir = null)
     {
         $this->environment = $environment;
         $this->debug = $debug;
         $this->rootDir = $this->getRootDir(false);
         $this->name = $this->getName(false);
+        $this->projectDir = $projectDir;
     }
 
     public function __clone()
@@ -808,15 +809,48 @@ abstract class Kernel implements KernelInterface, RebootableInterface
         return $output;
     }
 
+    /**
+     * @deprecated since Symfony 4.3
+     */
     public function serialize()
     {
+        @trigger_error(sprintf('The "%s" method is deprecated since Symfony 4.3.', __METHOD__), E_USER_DEPRECATED);
+
         return serialize([$this->environment, $this->debug]);
     }
 
+    /**
+     * @deprecated since Symfony 4.3
+     */
     public function unserialize($data)
     {
+        @trigger_error(sprintf('The "%s" method is deprecated since Symfony 4.3.', __METHOD__), E_USER_DEPRECATED);
         list($environment, $debug) = unserialize($data, ['allowed_classes' => false]);
 
         $this->__construct($environment, $debug);
+    }
+
+    public function __sleep()
+    {
+        if (__CLASS__ !== $c = (new \ReflectionMethod($this, 'serialize'))->getDeclaringClass()->name) {
+            @trigger_error(sprintf('Implementing the "%s::serialize()" method is deprecated since Symfony 4.3.', $c), E_USER_DEPRECATED);
+            $this->serialized = $this->serialize();
+
+            return ['serialized'];
+        }
+
+        return ['environment', 'debug'];
+    }
+
+    public function __wakeup()
+    {
+        if (__CLASS__ !== $c = (new \ReflectionMethod($this, 'serialize'))->getDeclaringClass()->name) {
+            @trigger_error(sprintf('Implementing the "%s::serialize()" method is deprecated since Symfony 4.3.', $c), E_USER_DEPRECATED);
+            $this->unserialize($this->serialized);
+            unset($this->serialized);
+
+            return;
+        }
+        $this->__construct($this->environment, $this->debug);
     }
 }

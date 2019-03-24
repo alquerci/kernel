@@ -285,8 +285,8 @@ EOF;
         $debug = true;
         $kernel = new KernelForTest($env, $debug);
 
-        $expected = serialize([$env, $debug]);
-        $this->assertEquals($expected, $kernel->serialize());
+        $expected = 'O:54:"Instinct\\Component\\Kernel\\Tests\\Fixtures\\KernelForTest":2:{s:14:"'."\0".'*'."\0".'environment";s:8:"test_env";s:8:"'."\0".'*'."\0".'debug";b:1;}';
+        $this->assertEquals($expected, serialize($kernel));
     }
 
     /**
