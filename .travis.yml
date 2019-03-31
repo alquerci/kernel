@@ -17,4 +17,4 @@ install:
     - composer update --no-progress --no-suggest --ansi --prefer-dist
 
 script:
-    - phpunit
+    - vendor/bin/simple-phpunit
